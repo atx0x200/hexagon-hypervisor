@@ -409,10 +409,33 @@ Total: 682 passed, 0 failed → artifacts/test_report.html (50 KB)
 
 TODO: add top-level summary table + parseable combined JSON artifact to gen_test_report.py.
 
-**NEXT TASK:** Consider committing the branch. Remaining open items:
-- Phase 2 DAG (per-component selective re-runs)
-- Top-level summary table + combined JSON in gen_test_report.py
-- Dead code cleanup in `Makefile.inc.test` (old `report.html`/`h2_report.html`/`qurt_report.html` targets ~lines 249-280)
+### loadlinux / QEMU Linux support (2026-05-31) — DONE
+
+Added `loadlinux` build support to match the older `H2/Makefile` wrapper.
+
+**`linux/makefile`:**
+- Added `KERNEL_BUILD_DIR := $(patsubst %/install,%/build/kernel,$(INSTALLPATH))`.
+  Replaces stale `-I$(KERNELPATH)/include` (source-tree `kernel/include/`, removed
+  by the build-isolation work) with `-I$(KERNEL_BUILD_DIR)/include` where all
+  kernel headers now live after a build.
+- Added `-DQEMU_DEVICE_TREE=$(QEMU_DEVICE_TREE)` to CFLAGS (present in H2/h2
+  but missing here).
+
+**`makefile` (top-level):**
+- Added `qemu_v73` and `qemu_v68` TARGET ifeq blocks setting `T := opt`,
+  `H2K_KERNEL_PGSIZE`, `HTHREADS`, and `H2K_LOAD_ADDR` defaults.  Without `T`,
+  INSTALLPATH resolved to `artifacts/v$(ARCHV)//install`.
+- Added `LINUX_LINK_ADDR`, `QEMU_DEVICE_TREE`, `HTHREADS` defaults after INSTALLPATH.
+- Added `LOADLINUX_FLAGS`, `loadlinux_v...`, `loadlinux`, `loadlinux.bin`, and
+  `cleanlinux` rules.  `kernel_tmp` copied from `$(INSTALLPATH)/stake/kernel_tmp`.
+
+**Invocation:**
+```sh
+make ARCHV=73 H2K_LOAD_ADDR=0x8fc00000 LINUX_LINK_ADDR=0xac000000 \
+     QEMU_DEVICE_TREE=0x99810000 loadlinux
+```
+
+**NEXT TASK:** Verify loadlinux builds successfully end-to-end.
 
 ### Parallel build race condition fixes (2026-05-14, completed 2026-05-15) — DONE
 

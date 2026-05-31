@@ -53,12 +53,13 @@ ifeq ($(KERNELPATH),)
 export KERNELPATH := $(H2DIR)/kernel
 endif
 
+KERNEL_BUILD_DIR := $(patsubst %/install,%/build/kernel,$(INSTALLPATH))
 
 OPTIMIZE=-O2
 
 BOOTVM_PROG := loadlinux
 
-CFLAGS = -Wall -G0 -g $(OPTIMIZE) -mv${TOOLARCH} -DARCHV=${ARCHV} -I. -Iinc -Isrc -I$(INSTALLPATH)/include -I$(KERNELPATH)/include -L. -L$(INSTALLPATH)/lib $(EXTRA_CFLAGS)
+CFLAGS = -Wall -G0 -g $(OPTIMIZE) -mv${TOOLARCH} -DARCHV=${ARCHV} -I. -Iinc -Isrc -I$(INSTALLPATH)/include -I$(KERNEL_BUILD_DIR)/include -L. -L$(INSTALLPATH)/lib $(EXTRA_CFLAGS) -DQEMU_DEVICE_TREE=$(QEMU_DEVICE_TREE)
 LDFLAGS = -L$(INSTALLPATH)/lib -moslib=h2
 
 include ../scripts/Makefile.inc.config

@@ -265,6 +265,10 @@ SECTIONS
   . = ALIGN (64);
   PROVIDE (end = .);
   . = DATA_SEGMENT_END (.);
+  .dummy_section (PROGBITS): AT(0x88f60000)
+  {
+      . += 0x10000;
+  }
   /* Stabs debugging sections.  */
   .stab          0 :  { *(.stab) }
   .stabstr       0 :  { *(.stabstr) }
