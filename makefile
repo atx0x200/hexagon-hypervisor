@@ -162,7 +162,7 @@ all_clean:
 
 distclean: clean docclean gtagsclean
 
-clean: covclean booterclean docclean qurtclean # ucosclean
+clean: covclean booterclean docclean qurtclean
 	$(MAKE) -C kernel ARCHV=$(ARCHV) clean
 	$(MAKE) -C stake ARCHV=$(ARCHV) clean
 	$(MAKE) -C libs ARCHV=$(ARCHV) clean
@@ -175,12 +175,9 @@ docclean:
 	$(MAKE) -C libs/docs/dox ARCHV=$(ARCHV) clean
 	$(MAKE) -f scripts/docs/Makefile.sphinx clean
 
-testclean covclean: qurtclean # ucosclean
+testclean covclean: qurtclean
 	$(MAKE) -f scripts/Makefile.coverage ARCHV=$(ARCHV) clean && \
 	$(MAKE) -f scripts/Makefile.coverage ARCHV=$(ARCHV) clean_top
-
-# ucosclean:
-# 	$(MAKE) -C ucos clean
 
 qurtclean:
 	$(MAKE) -f scripts/Makefile.qurt ARCHV=$(ARCHV) clean
@@ -282,10 +279,9 @@ endif
 	$(MAKE) -f scripts/Makefile.coverage ARCHV=$(ARCHV) TESTOUT=$(TESTOUT) test_summary
 	$(MAKE) check-fail
 
-h2_test: # ucosclean
+h2_test:
 	$(MAKE) -f scripts/Makefile.coverage ARCHV=$(ARCHV) prepare
 	$(MAKE) $(TEST_JFLAG) -f scripts/Makefile.coverage ARCHV=$(ARCHV) tst 2>&1 | tee $(INSTALLPATH)/make.log; exit $${PIPESTATUS[0]}
-#$(MAKE) -C ucos sim 2>&1 | tee make.log
 	[ `fgrep -v "WARNING: Overriding currently set revid" $(INSTALLPATH)/make.log | fgrep -v "warning: -j" | fgrep -c -i warning:` -eq 0 ]
 	$(MAKE) -f scripts/Makefile.coverage ARCHV=$(ARCHV) $(INSTALLPATH)/test_report.html
 	$(MAKE) -f scripts/Makefile.coverage ARCHV=$(ARCHV) $(INSTALLPATH)/test_results.json
@@ -316,11 +312,9 @@ h2_cov:
 
 check-fail test-check cov-check:
 	$(MAKE) -f scripts/Makefile.coverage ARCHV=$(ARCHV) TESTOUT=$(TESTOUT) check-fail
-#	$(MAKE) -C ucos check
 
 check:
 	$(MAKE) -f scripts/Makefile.coverage ARCHV=$(ARCHV) TESTOUT=$(TESTOUT) check
-#	$(MAKE) -C ucos check
 
 doc:
 	$(MAKE) -C libs/docs/dox

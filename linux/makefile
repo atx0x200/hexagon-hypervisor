@@ -113,44 +113,17 @@ endif
 
 CFLAGS += -DLINUX_LINK_ADDR=$(LINUX_LINK_ADDR) -DLINUX_LOAD_ADDR=$(LINUX_LOAD_ADDR) -DLINUX_OFFSET_ADDR=$(LINUX_OFFSET_ADDR) -DFRAME_BUFFER=$(FRAME_BUFFER)
 
-ifneq ($(UCOS),)
-
-# must be at least 64K aligned because of gp fixup in ucos_vm_boot
-ifeq ($(UCOS_LINK_ADDR),)
-UCOS_LINK_ADDR = 0xbfc00000
-endif
-
-ifeq ($(UCOS_LOAD_ADDR),)
-UCOS_LOAD_ADDR = $(UCOS_LINK_ADDR)
-endif
-
-CFLAGS += -DUCOS -DUCOS_LINK_ADDR=$(UCOS_LINK_ADDR) -DUCOS_LOAD_ADDR=$(UCOS_LOAD_ADDR)
-
-UCOS_BIN = ucos.bin
-
-UCOS_LINK = -Wl,--defsym=ucos_entry=$(UCOS_LINK_ADDR) -Wl,--defsym=ucos_loadaddr=$(UCOS_LOAD_ADDR)
-UCOS_OBJ = ucos_image.o
-endif
-
 BOOT_OBJ = boot.o
 
 .PHONY: all clean sim
 
 all: loadlinux
 
-$(UCOS_BIN):
-	$(MAKE) -C ../ucos clean UCOS_FOREVER=1 UCOS_LINK_ADDR=$(UCOS_LINK_ADDR) UCOS_LOAD_ADDR=$(UCOS_LOAD_ADDR) MILLISECONDS=$(MILLISECONDS) FRAME_BUFFER=$(FRAME_BUFFER) NO_PRINT=$(NO_PRINT) DEMO_DISPLAY=$(DEMO_DISPLAY) ucos.bin
-	ln -s ../ucos/ucos.bin .
-
-$(UCOS_OBJ): ucos_image.S $(UCOS_BIN)
-	${CC} ${CFLAGS} -c -o $@ ucos_image.S
-
-$(BOOTVM_IMAGE): loadlinux.o loadlinux_event.o $(BOOTVM_IMAGE_DEPS) $(UCOS_BIN) $(UCOS_OBJ)
-	${CC} $(LDFLAGS) $(CFLAGS) $(BOOTVM_IMAGE_CFLAGS) -Wl,--defsym=HEAP_SIZE=0x10000 -Wl,--defsym=STACK_SIZE=0x1000 -Wl,--defsym=linux_stext=$(LINUX_STEXT) $(UCOS_LINK) -o $@ loadlinux.o loadlinux_event.o $(UCOS_OBJ) $(BOOTVM_ENTRY_O)
+$(BOOTVM_IMAGE): loadlinux.o loadlinux_event.o $(BOOTVM_IMAGE_DEPS)
+	${CC} $(LDFLAGS) $(CFLAGS) $(BOOTVM_IMAGE_CFLAGS) -Wl,--defsym=HEAP_SIZE=0x10000 -Wl,--defsym=STACK_SIZE=0x1000 -Wl,--defsym=linux_stext=$(LINUX_STEXT) -o $@ loadlinux.o loadlinux_event.o $(BOOTVM_ENTRY_O)
 
 clean:
-	$(MAKE) -C ../ucos clean
-	rm -f *.o loadlinux ucos.bin $(BOOTVM_CLEAN)
+	rm -f *.o loadlinux $(BOOTVM_CLEAN)
 
 
 sim test.log : loadlinux

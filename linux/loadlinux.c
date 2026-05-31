@@ -22,7 +22,6 @@
 #include <string.h>
 
 #define LINUX_NUM_VCPU 4
-#define UCOS_NUM_VCPU 1
 
 #define TOTAL_INTS 288
 
@@ -30,7 +29,6 @@
 #define SHARED_INTS (TOTAL_INTS + 32)
 #define VCPU_STACK_SIZE 1024
 #define LINUX_VM_PRIO 3
-#define UCOS_VM_PRIO 1
 
 #define VM_STATUS_REBOOT 3
 
@@ -42,24 +40,11 @@ H2K_offset_t linux_offset = {{
 	}};
 
 unsigned long long int linux_vcpu_stacks[LINUX_NUM_VCPU][VCPU_STACK_SIZE];
-unsigned long long int ucos_vcpu_stacks[UCOS_NUM_VCPU][VCPU_STACK_SIZE];
 
 #ifdef NO_PRINT
 #define PRINTF(format, args...)
 #else
 #define PRINTF(format, args...) printf (format , ##args)
-#endif
-
-#ifdef UCOS
-H2K_linear_fmt_t ucos_pmap[] = {
-#include "../ucos/pmap_ucos.def"
-	{ .raw = 0 },
-};
-
-extern void ucos_image_start();
-extern void ucos_image_end();
-extern void ucos_loadaddr();
-extern void ucos_entry();
 #endif
 
 extern void linux_stext();
@@ -115,34 +100,6 @@ void setup_ints(unsigned long vm, char num_cpus) {
 				FAIL("MAP_PHYS_INTR");
 		}
 	}
-}
-
-void boot_ucos() {
-
-#ifdef UCOS
-	unsigned long ucos_vm;
-	int i;
-
-	PRINTF("ucos: start boot\n");
-	ucos_vm = vm_setup(UCOS_NUM_VCPU, SHARED_INTS, (u32_t)ucos_pmap, 0xffffffff, H2K_ASID_TRANS_TYPE_LINEAR);
-	PRINTF("ucos: vm set up\n");
-
-	PRINTF("ucos: loading to 0x%08x from 0x%08x, size 0x%08x\n", (unsigned int)ucos_loadaddr, (unsigned int)ucos_image_start, (unsigned int)(ucos_image_end - ucos_image_start));
-	memcpy(ucos_loadaddr, ucos_image_start, ucos_image_end - ucos_image_start);
-
-	for (i = 0; i < ((ucos_image_end - ucos_image_start + 32) / 32) * 32; i += 32) {
-		asm volatile ("dccleana(%0)" : :"r"(ucos_loadaddr + i):"memory");
-		asm volatile ("icinva(%0)" : :"r"(ucos_loadaddr + i):"memory");
-	};
-	asm volatile (" syncht ");
-
-	PRINTF("ucos: loaded\n");
-
-	if (h2_vmboot(ucos_entry, &ucos_vcpu_stacks[0][VCPU_STACK_SIZE - 1],
-								0, UCOS_VM_PRIO, ucos_vm) == -1) FAIL("ucos vmboot");
-
-	PRINTF ("ucos: booted\n");
-#endif
 }
 
 unsigned long boot_linux(char fname[]) {
@@ -304,8 +261,6 @@ int main(int argc, char *argv[]) {
 #endif
 
 	print_infos();
-
-	boot_ucos();
 
 	do {
 		linux_vm = boot_linux(fname);
