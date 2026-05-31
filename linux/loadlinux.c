@@ -16,12 +16,13 @@
 #include <h2_config.h>
 #include <h2_vmtraps.h>
 #include <h2_kerror.h>
+#include <cfg_table.h>
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#define LINUX_NUM_VCPU 4
+#define LINUX_NUM_VCPU 6
 
 #define TOTAL_INTS 288
 
@@ -33,13 +34,23 @@
 #define VM_STATUS_REBOOT 3
 
 H2K_offset_t linux_offset = {{
-	.size = SIZE_4M,
+	.size = SIZE_16M,
 	.cccc = L1WB_L2C,
 	.xwru = URWX,
 	.pages = (LINUX_OFFSET_ADDR >> PAGE_BITS)
 	}};
 
 unsigned long long int linux_vcpu_stacks[LINUX_NUM_VCPU][VCPU_STACK_SIZE];
+
+typedef enum {
+	H2K_CACHECTL_ICKILL,
+	H2K_CACHECTL_DCKILL,
+	H2K_CACHECTL_L2KILL,
+	H2K_CACHECTL_DCCLEANINVA,
+	H2K_CACHECTL_ICINVA,
+	H2K_CACHECTL_IDSYNC,
+	H2K_CACHECTL_BADOP
+} cacheop_type;
 
 #ifdef NO_PRINT
 #define PRINTF(format, args...)
@@ -69,7 +80,7 @@ unsigned long vm_setup(char num_cpus, short num_ints, u32_t trans, unsigned long
 	}
 
 	if (pt == H2K_ASID_TRANS_TYPE_OFFSET) {
-		/* Memory map:  0 ... Linux ... frame buffer ... H2 ... boot VM ... ucos */
+		/* Memory map:  0 ... Linux ... frame buffer ... H2 ... boot VM ... other */
 		//		ret = h2_config_vmblock_init(vm, SET_FENCES, 0x0, FRAME_BUFFER);
 		ret = h2_config_vmblock_init(vm, SET_FENCES, 0x0, 0xfe000000);
 		if (ret != vm) {
@@ -100,6 +111,26 @@ void setup_ints(unsigned long vm, char num_cpus) {
 				FAIL("MAP_PHYS_INTR");
 		}
 	}
+}
+
+static inline uint64_t tlb_from_entry(uint32_t vaddr, uint64_t paddr_64, unsigned int size, uint32_t cache_attribs, uint32_t perms) {
+	uint64_t entry;
+	entry = 0xC0000000 | (vaddr >> 12);
+	entry <<= 32;
+	entry |= ((uint64_t)perms) << 29;
+	entry |= (1) << 28; // U bit
+	entry |= cache_attribs << 24;
+	entry |= ((paddr_64 >> 11) & (0x00FFFFFF) & (-2 << (size*2)));
+	entry |= (1<<(size));
+	return entry;
+}
+static inline void write_tlb_entry(uint64_t entry, int index) {
+	__asm__ volatile ("tlblock");
+	__asm__ volatile ("tlbw(%[entry], %[index])"
+		::[entry] "r" (entry),
+		[index] "r" (index));
+	__asm__ volatile ("isync\n");
+	__asm__ volatile ("tlbunlock");
 }
 
 unsigned long boot_linux(char fname[]) {
@@ -163,15 +194,6 @@ unsigned long boot_linux(char fname[]) {
 	return linux_vm;
 }
 
-extern void bootvm_vectors();
-
-//volatile unsigned int *ss_pub_base = (void *)0xFFC00000;
-//  Use physical address which will go through a straight-through mapping of device type.
-volatile unsigned int *ss_pub_base = (void *) 0x28800000;
-#define FLL_CTL (0x3c >> 2)
-#define FLL_STATUS (0x40 >> 2)
-#define GFMUX_CTL (0x30 >> 2)
-
 void handle_child_int() {
 	h2_vmtrap_intop(H2K_INTOP_GLOBEN, H2K_VM_CHILDINT, 0);
 }
@@ -228,6 +250,7 @@ int main(int argc, char *argv[]) {
 	unsigned long linux_vm;
 	int status, cpus;
 	unsigned int kerror;
+	extern void bootvm_vectors();
 
 	if (argc > 1) {
 		sscanf(argv[1], "%s", fname);
