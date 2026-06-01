@@ -137,12 +137,32 @@ unsigned long boot_linux(char fname[]) {
 
 	unsigned long linux_vm = 0;
 
-#ifdef LINUX
 	PRINTF("linux: start boot\n");
 
-	linux_vm = vm_setup(LINUX_NUM_VCPU, SHARED_INTS, linux_offset.raw, 0x1, H2K_ASID_TRANS_TYPE_OFFSET);
+// See: https://ipcatalog.qualcomm.com/irqs/chip/102/map/788
+// The value below is found there +32.  So we are using 59,
+// APSS_cdspIPCInterrupt[1](Subsystem Port column) or
+// APSS_cdspIPCInterrupt_1_(Interrupt column).
+// Search for the above terms to get the specific info about each interrupt.
+// *** Type: APSS into the "Core" column, then "APSS_cdsp" into the Interrupt
+//     column header to limit the results.
+#define IPC_INT 91
+
+	//write_tlb_entry(tlb_from_entry(0xb0000000, 0xb0000000, 4, 0x4, 0x3), 43);
+	asm volatile("r0 = ##0xb0000000;  memw(r0) = ##0x43434343");
+	h2_vmtrap_cachectl(H2K_CACHECTL_ICKILL, 0, 0);
+	h2_vmtrap_cachectl(H2K_CACHECTL_DCKILL, 0, 0);
+	h2_vmtrap_cachectl(H2K_CACHECTL_L2KILL, 0, 0);
+	h2_intwait(IPC_INT);
+	asm volatile("r0 = ##0xb0000010;  memw(r0) = ##0xFEEDFACE");
+	h2_vmtrap_cachectl(H2K_CACHECTL_ICKILL, 0, 0);
+	h2_vmtrap_cachectl(H2K_CACHECTL_DCKILL, 0, 0);
+	h2_vmtrap_cachectl(H2K_CACHECTL_L2KILL, 0, 0);
+
+	linux_vm = vm_setup(LINUX_NUM_VCPU, SHARED_INTS, linux_offset.raw, 0x1 | (1 << 31), H2K_ASID_TRANS_TYPE_OFFSET);
 	setup_ints(linux_vm, LINUX_NUM_VCPU);
 	PRINTF("linux: vm set up\n");
+	asm volatile("r0 = ##0xb0000010;  memw(r0) = ##0xF00DF00D");
 
 #ifndef NO_LOAD
 	size_t count;
@@ -187,10 +207,9 @@ unsigned long boot_linux(char fname[]) {
 #endif
 
 	if (h2_vmboot(linux_stext, &linux_vcpu_stacks[0][VCPU_STACK_SIZE - 1],
-								0, LINUX_VM_PRIO, linux_vm) == -1) FAIL("linux vmboot");
+								QEMU_DEVICE_TREE, LINUX_VM_PRIO, linux_vm) == -1) FAIL("linux vmboot");
 
 	PRINTF ("linux: booted\n");
-#endif
 	return linux_vm;
 }
 
