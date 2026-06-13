@@ -221,6 +221,18 @@ lldb-setup:
 lldb-setup-clean:
 	$(MAKE) -f scripts/Makefile.lldb_setup clean
 
+# QEMU Linux boot address defaults — override any of these on the command line.
+LINUX_LINK_ADDR  ?= 0xa0000000
+QEMU_DEVICE_TREE ?= 0x99800000
+HTHREADS         ?= 6
+
+LOADLINUX_FLAGS = HTHREADS=$(HTHREADS) ARCHV=$(ARCHV) TARGET=qemu_v$(ARCHV) \
+    NULL_ANGEL_TRAP= DEMO_DISPLAY=1 NO_LOAD=1 NO_PRINT=1 \
+    H2K_LOAD_ADDR=$(H2K_LOAD_ADDR) LINUX_LINK_ADDR=$(LINUX_LINK_ADDR) \
+    FRAME_BUFFER=$(FRAME_BUFFER) \
+    QEMU_DEVICE_TREE=$(QEMU_DEVICE_TREE) \
+    H2K_KERNEL_PGSIZE=$(H2K_KERNEL_PGSIZE) all
+
 # Build a QEMU-bootable Linux loader image.
 # Invocation (addresses vary by NSP slot):
 #       make USE_PKW= ARCHV=68 H2K_LOAD_ADDR=0x88f00000 LINUX_LINK_ADDR=0xa1000000 \
@@ -231,13 +243,13 @@ lldb-setup-clean:
 # NULL_ANGEL_TRAP=1.  Run 'make opt' afterwards to restore a normal test build.
 loadlinux_v$(ARCHV)_$(H2K_LOAD_ADDR)_$(LINUX_LINK_ADDR)_$(QEMU_DEVICE_TREE):
 	$(MAKE) ARCHV=$(ARCHV) TARGET=qemu_v$(ARCHV) H2K_KERNEL_PGSIZE=$(H2K_KERNEL_PGSIZE) clean
-	$(MAKE) ARCHV=$(ARCHV) TARGET=qemu_v$(ARCHV) H2K_KERNEL_PGSIZE=$(H2K_KERNEL_PGSIZE) opt NULL_ANGEL_TRAP=1
+	$(MAKE) ARCHV=$(ARCHV) TARGET=qemu_v$(ARCHV) H2K_KERNEL_PGSIZE=$(H2K_KERNEL_PGSIZE) build NULL_ANGEL_TRAP=1
 	$(MAKE) -C linux clean
 	$(MAKE) -C linux $(LOADLINUX_FLAGS)
 	cp linux/loadlinux .
 	cp linux/loadlinux $@
 	hexagon-llvm-objcopy -O binary $@ $@.bin
-	cp $(INSTALLPATH)/stake/kernel_tmp .
+	cp $(H2DIR)/artifacts/v$(ARCHV)/qemu_v$(ARCHV)/install/stake/kernel_tmp .
 
 loadlinux: loadlinux_v$(ARCHV)_$(H2K_LOAD_ADDR)_$(LINUX_LINK_ADDR)_$(QEMU_DEVICE_TREE)
 

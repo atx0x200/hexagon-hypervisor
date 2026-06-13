@@ -435,7 +435,68 @@ make ARCHV=73 H2K_LOAD_ADDR=0x8fc00000 LINUX_LINK_ADDR=0xac000000 \
      QEMU_DEVICE_TREE=0x99810000 loadlinux
 ```
 
-**NEXT TASK:** Verify loadlinux builds successfully end-to-end.
+**NEXT TASK:** Verify loadlinux builds successfully end-to-end. — DONE, see below.
+
+### Fix loadlinux build on RubikPI-rebase after upstream/master merge (2026-06-13) — DONE
+
+`RubikPI-rebase` (merge of `RubikPI-works` + `upstream/master`, commit `1e637f39`)
+broke `make loadlinux` for ARCHV=68/73.  Upstream's makefile refactor
+(`576dfa9a`, `23ea691b`, `a88410e7`) moved per-TARGET config blocks from the
+top-level `makefile` into `scripts/Makefile.inc.config`, renamed `T` →
+`BUILD_TYPE`, and replaced `opt:`/`ref:` recipes with a generic `build:`
+target.  The old `qemu_v68`/`qemu_v73` TARGET blocks and `LOADLINUX_FLAGS`/
+`LINUX_LINK_ADDR`/`QEMU_DEVICE_TREE`/`HTHREADS` were dropped in the merge.
+There is no upstream-provided replacement TARGET for `qemu_v68`/`qemu_v73`.
+
+Four fixes applied (all on `RubikPI-rebase`):
+
+1. **`scripts/Makefile.inc.config`**: re-added `qemu_v68`/`qemu_v73` TARGET
+   blocks (using `BUILD_TYPE := opt` instead of old `T := opt`), each setting
+   `H2K_KERNEL_PGSIZE`, `HTHREADS=6`, `H2K_LOAD_ADDR=0x9b800000`.
+2. **`makefile`**: in `loadlinux_v...:` recipe, changed the now-nonexistent
+   `opt` goal to `build` for the kernel/libs/stake/booter build step.
+3. **`makefile`**: re-added `LINUX_LINK_ADDR`/`QEMU_DEVICE_TREE`/`HTHREADS`
+   defaults and the `LOADLINUX_FLAGS` definition (passed to
+   `$(MAKE) -C linux ...`), placed before the loadlinux rules.
+4. **`kernel/init/setup/setup.ref.c:197`**: fixed a pre-existing (since 2017,
+   commit `b2c020a61`) missing `)` in
+   `requested = Q6_R_popcount_P(H2K_gp->hthreads_mask;` →
+   `...hthreads_mask);`.  This `#ifdef NUM_HTHREADS` / `H2K_gp->arch > 0x65`
+   code path was never compiled before because `HTHREADS` never reached the
+   kernel sub-make's CFLAGS as `-DNUM_HTHREADS`.  Since fix #1 moved the
+   `qemu_v68`/`qemu_v73` blocks (which set `HTHREADS=6`) into
+   `scripts/Makefile.inc.config` — which `kernel/Makefile` also includes, and
+   `TARGET=qemu_v$(ARCHV)` propagates to the kernel sub-make as a
+   command-line var — `kernel/Makefile`'s `ifdef HTHREADS` →
+   `CFLAGS += -DNUM_HTHREADS=$(HTHREADS)` now fires for the first time,
+   exposing the typo.
+
+**Bonus fix — stale `kernel_tmp`:** Also fixed `makefile`'s
+`cp $(INSTALLPATH)/stake/kernel_tmp .` → `cp $(H2DIR)/artifacts/v$(ARCHV)/qemu_v$(ARCHV)/install/stake/kernel_tmp .`.
+In the old scheme `INSTALLPATH` resolved to `artifacts/v$(ARCHV)/opt/install`
+for *both* the top-level invocation (`TARGET` defaults to `opt`) and the
+inner `TARGET=qemu_v$(ARCHV)` build (old `T := opt`), so they coincided. In
+the new scheme `INSTALLPATH := artifacts/v$(ARCHV)/$(TARGET)/install` uses
+`TARGET` directly, so the top-level `$(INSTALLPATH)` (→ `.../opt/install`)
+no longer matches the inner build's `.../qemu_v$(ARCHV)/install` — the old
+recipe was silently copying a stale/wrong `kernel_tmp`.
+
+Verified end-to-end with:
+```sh
+make USE_PKW= ARCHV=68 H2K_LOAD_ADDR=0x88f00000 LINUX_LINK_ADDR=0xa1000000 \
+     QEMU_DEVICE_TREE=0xa1001200 cleanlinux
+make USE_PKW= ARCHV=68 H2K_LOAD_ADDR=0x88f00000 LINUX_LINK_ADDR=0xa1000000 \
+     QEMU_DEVICE_TREE=0xa1001200 loadlinux
+```
+Produces `loadlinux`, `loadlinux_v68_0x88f00000_0xa1000000_0xa1001200(.bin)`,
+and `kernel_tmp` (now correctly matching
+`artifacts/v68/qemu_v68/install/stake/kernel_tmp`).
+
+**NEXT TASK:** Run `doit.sh` (cleanlinux/loadlinux/qtestsign.py → cdsp.mdt)
+and `push.sh` to deploy to the RubikPI board and confirm it boots Linux.
+Also consider committing the scratch/debug untracked files cleanup
+(`d`, `diff`, `x`, `old-good-buildlog.txt`, `new-bad-buildlog.txt`,
+`new-test-buildlog*.txt`).
 
 ### Parallel build race condition fixes (2026-05-14, completed 2026-05-15) — DONE
 
